@@ -6,6 +6,7 @@ import co.deepthought.imagine.store.ImageMetaStore;
 import co.deepthought.imagine.store.ImageStore;
 import co.deepthought.imagine.store.Size;
 import com.sleepycat.je.DatabaseException;
+import org.apache.log4j.Logger;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 
@@ -20,6 +21,8 @@ import java.io.PrintWriter;
 import java.net.URL;
 
 public class SideloadHandler extends AbstractHandler {
+
+    final static Logger LOGGER = Logger.getLogger(ImageServer.class.getCanonicalName());
 
     private final Size fingerprintSizeLarge;
     private final Size fingerprintSizeSmall;
@@ -49,8 +52,9 @@ public class SideloadHandler extends AbstractHandler {
     {
         if(path.equals("/sideload/")) {
             response.setContentType("application/json");
+            final String url = request.getParameter("url");
             try {
-                final String url = request.getParameter("url");
+                final long start = System.currentTimeMillis();
                 final BufferedImage img = ImageIO.read(new URL(url));
 
                 final Fingerprinter fingerprinter = new Fingerprinter(img);
@@ -64,6 +68,7 @@ public class SideloadHandler extends AbstractHandler {
                     this.metaStore.persist(image);
                     this.imageStore.saveImage(image, img);
                     this.writeSuccessMessage(response.getWriter(), image, "new");
+                    LOGGER.info("Sideload NEW: " + url + " in " + (System.currentTimeMillis()-start));
                 }
                 else if(duplicate.compareTo(image) < 0) {
                     // If the new image is bigger, replace it
@@ -71,10 +76,16 @@ public class SideloadHandler extends AbstractHandler {
                     this.metaStore.persist(image);
                     this.imageStore.saveImage(image, img);
                     this.writeSuccessMessage(response.getWriter(), image, "replace-duplicate");
+                    LOGGER.info("Sideload REPLACE-DUPE: " + url +
+                        " - " + duplicate.getId() +
+                        " in " + (System.currentTimeMillis()-start));
                 }
                 else {
                     // If the duplicate is big enough use it.
                     this.writeSuccessMessage(response.getWriter(), duplicate, "use-duplicate");
+                    LOGGER.info("Sideload USE-DUPE: " + url +
+                        " - " + duplicate.getId() +
+                        " in " + (System.currentTimeMillis()-start));
                 }
                 response.setStatus(HttpServletResponse.SC_OK);
             } catch (DatabaseException e) {
@@ -83,10 +94,12 @@ public class SideloadHandler extends AbstractHandler {
             } catch (IIOException e) {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 response.getWriter().print("{\"error\": \"image missing\",\"status\":\"error\"}");
+                LOGGER.info("Sideload MISSING: " + url);
             }
             catch(CMMException e) {
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 response.getWriter().print("{\"error\": \"image format problem\",\"status\":\"error\"}");
+                LOGGER.info("Sideload ERROR: " + url);
             }
             request.setHandled(true);
         }
@@ -97,8 +110,8 @@ public class SideloadHandler extends AbstractHandler {
         writer.print("\"width\":" + image.getSize().getWidth() + ",");
         writer.print("\"height\":" + image.getSize().getHeight() + ",");
         writer.print("\"id\":\"" + image.getId() + "\",");
-        writer.print("\"fingerprintSmall\":\"" + image.getFingerprintSmall() +"\",");
-        writer.print("\"fingerprintLarge\":\"" + image.getFingerprintLarge() +"\",");
+        writer.print("\"fingerprintSmall\":\"" + image.getFingerprintSmall() + "\",");
+        writer.print("\"fingerprintLarge\":\"" + image.getFingerprintLarge() + "\",");
         writer.print("\"status\":\"" + status + "\"");
         writer.print("}");
     }

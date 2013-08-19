@@ -1,6 +1,7 @@
 package co.deepthought.imagine.image;
 
 import co.deepthought.imagine.store.Size;
+import org.imgscalr.Scalr;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -50,8 +51,16 @@ public class Resizer {
     public BufferedImage resizeImage(final BufferedImage sourceImage) {
         final Size sourceSize = new Size(sourceImage.getWidth(), sourceImage.getHeight());
         final Size imageSize = this.getImageSize(sourceSize);
-        final Size canvasSize = this.getCanvasSize(sourceSize);
 
+        final BufferedImage resized = Scalr.resize(
+            sourceImage,
+            Scalr.Method.AUTOMATIC,
+            Scalr.Mode.FIT_EXACT,
+            imageSize.getWidth(),
+            imageSize.getHeight()
+        );
+
+        final Size canvasSize = this.getCanvasSize(sourceSize);
         final BufferedImage newImage = new BufferedImage(
             canvasSize.getWidth(),
             canvasSize.getHeight(),
@@ -64,7 +73,7 @@ public class Resizer {
 
         final int left = (canvasSize.getWidth() - imageSize.getWidth()) / 2;
         final int top = (canvasSize.getHeight() - imageSize.getHeight()) / 2;
-        g.drawImage(sourceImage, left, top, imageSize.getWidth(), imageSize.getHeight(), null);
+        g.drawImage(resized, left, top, imageSize.getWidth(), imageSize.getHeight(), null);
         g.dispose();
 
         return newImage;

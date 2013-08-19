@@ -1,23 +1,23 @@
 package co.deepthought.imagine.server;
 
 import co.deepthought.imagine.image.Resizer;
-import co.deepthought.imagine.store.ImageMeta;
 import co.deepthought.imagine.store.ImageStore;
 import co.deepthought.imagine.store.Size;
+import org.apache.log4j.Logger;
 import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 
-import javax.imageio.ImageIO;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 
 public class ImageHandler extends AbstractHandler {
+
+    final static Logger LOGGER = Logger.getLogger(ImageServer.class.getCanonicalName());
 
     private final ImageStore store;
 
@@ -33,6 +33,7 @@ public class ImageHandler extends AbstractHandler {
         final HttpServletResponse response) throws IOException, ServletException
     {
         if(path.startsWith("/image/")) {
+            final long start = System.currentTimeMillis();
             response.setContentType("image/jpeg");
             final String imagePath = path.substring(7);
             final BufferedImage srcImage = this.store.readImage(imagePath);
@@ -44,6 +45,8 @@ public class ImageHandler extends AbstractHandler {
                 final Resizer resizer = this.getResizer(srcImage, request);
                 resizer.writeImage(srcImage, os);
                 response.setStatus(HttpServletResponse.SC_OK);
+                LOGGER.info("Image " + path +
+                    " in " + (System.currentTimeMillis() - start));
             }
             request.setHandled(true);
         }

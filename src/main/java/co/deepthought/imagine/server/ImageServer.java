@@ -16,8 +16,6 @@ import java.util.Properties;
 
 public class ImageServer {
 
-    final static Logger LOGGER = Logger.getLogger(ImageServer.class.getCanonicalName());
-
     public static void main(final String[] args) throws Exception {
         PropertyConfigurator.configure("resources/log4j.properties");
         final Properties prop = new Properties();
