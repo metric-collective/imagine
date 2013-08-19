@@ -1,7 +1,6 @@
 package co.deepthought.imagine.server;
 
-import co.deepthought.imagine.store.ImageStore;
-import co.deepthought.imagine.store.Size;
+import co.deepthought.imagine.store.*;
 import com.sleepycat.je.DatabaseException;
 
 import org.apache.log4j.Logger;
@@ -28,25 +27,44 @@ public class ImageServer {
     }
 
     private final int port;
-    private final ImageStore store;
+    private final ImageMetaStore store;
     private final Size fingerprintSizeLarge;
     private final Size fingerprintSizeSmall;
-    private final String imagedir;
+    private final ImageStore imageStore;
+    private final int similarityTolerance;
 
     public ImageServer(final Properties prop) throws DatabaseException {
         this.port = Integer.parseInt(prop.getProperty("port"));
-        this.store = new ImageStore(prop.getProperty("dbfile"));
-        this.fingerprintSizeLarge = new Size(prop.getProperty("fingerprintResolutionLarge"));
-        this.fingerprintSizeSmall = new Size(prop.getProperty("fingerprintResolutionSmall"));
-        this.imagedir = prop.getProperty("imagedir");
+        this.store = new ImageMetaStore(prop.getProperty("dbfile"));
+        this.fingerprintSizeLarge = new Size(prop.getProperty("fingerprint_large"));
+        this.fingerprintSizeSmall = new Size(prop.getProperty("fingerprint_small"));
+        this.similarityTolerance = Integer.parseInt(prop.getProperty("fingerprint_tolerance"));
+
+        final String storeType = prop.getProperty("store_type");
+        if(storeType.equals("fs")) {
+            this.imageStore = new FilesystemImageStore(prop.getProperty("store_fs_dir"));
+        }
+        else { // s3?
+            this.imageStore = new S3ImageStore(
+                prop.getProperty("store_s3_bucket"),
+                prop.getProperty("store_s3_prefix"),
+                prop.getProperty("store_s3_key"),
+                prop.getProperty("store_s3_secret")
+            );
+        }
     }
 
     public void startServer() throws Exception {
         Server server = new Server(this.port);
         final HandlerCollection handlers = new HandlerCollection();
         handlers.setHandlers(new Handler[] {
-            new SideloadHandler(this.store, this.fingerprintSizeLarge, this.fingerprintSizeSmall, this.imagedir),
-            new ImageHandler()
+            new SideloadHandler(
+                this.imageStore,
+                this.store,
+                this.fingerprintSizeLarge,
+                this.fingerprintSizeSmall,
+                this.similarityTolerance),
+            new ImageHandler(this.imageStore)
         });
         server.setHandler(handlers);
         server.setAttribute("org.eclipse.jetty.server.Request.maxFormContentSize", -1);

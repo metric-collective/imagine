@@ -1,7 +1,8 @@
 package co.deepthought.imagine.server;
 
 import co.deepthought.imagine.image.Fingerprinter;
-import co.deepthought.imagine.store.Image;
+import co.deepthought.imagine.store.ImageMeta;
+import co.deepthought.imagine.store.ImageMetaStore;
 import co.deepthought.imagine.store.ImageStore;
 import co.deepthought.imagine.store.Size;
 import com.sleepycat.je.DatabaseException;
@@ -14,26 +15,29 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.awt.color.CMMException;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.URL;
 
 public class SideloadHandler extends AbstractHandler {
 
     private final Size fingerprintSizeLarge;
     private final Size fingerprintSizeSmall;
-    private final ImageStore store;
-    private final String imagedir;
+    private final ImageMetaStore metaStore;
+    private final ImageStore imageStore;
+    private final int similarityTolerance;
 
     public SideloadHandler(
-            final ImageStore store,
+            final ImageStore imageStore,
+            final ImageMetaStore metaStore,
             final Size fingerprintSizeLarge,
             final Size fingerprintSizeSmall,
-            final String imagedir) {
-        this.store = store;
+            final int similarityTolerance) {
+        this.metaStore = metaStore;
         this.fingerprintSizeLarge = fingerprintSizeLarge;
         this.fingerprintSizeSmall = fingerprintSizeSmall;
-        this.imagedir = imagedir;
+        this.imageStore = imageStore;
+        this.similarityTolerance = similarityTolerance;
     }
 
     @Override
@@ -52,38 +56,51 @@ public class SideloadHandler extends AbstractHandler {
                 final Fingerprinter fingerprinter = new Fingerprinter(img);
                 final String fingerprintSmall = fingerprinter.getFingerprint(this.fingerprintSizeSmall);
                 final String fingerprintLarge = fingerprinter.getFingerprint(this.fingerprintSizeLarge);
+
                 final Size size = new Size(img.getWidth(), img.getHeight());
-
-                final Image image = new Image(fingerprintSmall, fingerprintLarge, size);
-                this.store.persist(image);
-
-//                final File outputFile = new File(this.imagedir + image.getId());
-//                ImageIO.write(img, "jpg", outputFile);
-
+                final ImageMeta image = new ImageMeta(fingerprintSmall, fingerprintLarge, size);
+                final ImageMeta duplicate = this.metaStore.getSimilar(image, this.similarityTolerance);
+                if(duplicate == null) {
+                    this.metaStore.persist(image);
+                    this.imageStore.saveImage(image, img);
+                    this.writeSuccessMessage(response.getWriter(), image, "new");
+                }
+                else if(duplicate.compareTo(image) < 0) {
+                    // If the new image is bigger, replace it
+                    image.setId(duplicate.getId());
+                    this.metaStore.persist(image);
+                    this.imageStore.saveImage(image, img);
+                    this.writeSuccessMessage(response.getWriter(), image, "replace-duplicate");
+                }
+                else {
+                    // If the duplicate is big enough use it.
+                    this.writeSuccessMessage(response.getWriter(), duplicate, "use-duplicate");
+                }
                 response.setStatus(HttpServletResponse.SC_OK);
-                response.getWriter().print("{");
-                response.getWriter().print("\"width\":" + size.getWidth() + ",");
-                response.getWriter().print("\"height\":" + size.getHeight() + ",");
-                response.getWriter().print("\"id\":\"" + image.getId() + "\",");
-                response.getWriter().print("\"fingerprintSmall\":\"" + fingerprintSmall +"\",");
-                response.getWriter().print("\"fingerprintLarge\":\"" + fingerprintLarge +"\",");
-                response.getWriter().print("\"success\":true");
-                response.getWriter().print("}");
             } catch (DatabaseException e) {
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                response.getWriter().print("{\"error\": \"database error\"}");
+                response.getWriter().print("{\"error\": \"database error\",\"status\":\"error\"}");
             } catch (IIOException e) {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                response.getWriter().print("{\"error\": \"image missing\"}");
+                response.getWriter().print("{\"error\": \"image missing\",\"status\":\"error\"}");
             }
             catch(CMMException e) {
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                response.getWriter().print("{\"error\": \"image format proble\"}");
+                response.getWriter().print("{\"error\": \"image format problem\",\"status\":\"error\"}");
             }
             request.setHandled(true);
         }
+    }
 
-
+    public void writeSuccessMessage(final PrintWriter writer, final ImageMeta image, final String status) {
+        writer.print("{");
+        writer.print("\"width\":" + image.getSize().getWidth() + ",");
+        writer.print("\"height\":" + image.getSize().getHeight() + ",");
+        writer.print("\"id\":\"" + image.getId() + "\",");
+        writer.print("\"fingerprintSmall\":\"" + image.getFingerprintSmall() +"\",");
+        writer.print("\"fingerprintLarge\":\"" + image.getFingerprintLarge() +"\",");
+        writer.print("\"status\":\"" + status + "\"");
+        writer.print("}");
     }
 
 }

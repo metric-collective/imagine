@@ -9,3 +9,5 @@
 .DS_STORE
 *.iml
 target/*
+resources/config.properties
+resources/log4j.properties
