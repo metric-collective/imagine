@@ -9,7 +9,7 @@ import com.sleepycat.persist.model.SecondaryKey;
 import java.util.UUID;
 
 @Entity
-public class Image {
+public class ImageMeta {
 
     @PrimaryKey
     private String id;
@@ -18,9 +18,9 @@ public class Image {
     private String fingerprintLarge;
     private Size size;
 
-    private Image() {}
+    private ImageMeta() {}
 
-    public Image(final String fingerprintSmall, final String fingerprintLarge, final Size size) {
+    public ImageMeta(final String fingerprintSmall, final String fingerprintLarge, final Size size) {
         this.id = UUID.randomUUID().toString();
         this.fingerprintSmall = fingerprintSmall;
         this.fingerprintLarge = fingerprintLarge;

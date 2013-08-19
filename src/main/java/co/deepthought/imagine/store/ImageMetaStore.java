@@ -8,17 +8,17 @@ import java.io.File;
 import java.util.*;
 
 /**
- *  ImageStore persists statistics about images to the database.
+ *  ImageMetaStore persists statistics about images to the database.
  */
-public class ImageStore {
+public class ImageMetaStore {
 
-    final static Logger LOGGER = Logger.getLogger(ImageStore.class.getCanonicalName());
+    final static Logger LOGGER = Logger.getLogger(ImageMetaStore.class.getCanonicalName());
 
     final private Environment environment;
     final private EntityStore store;
     final private PrimaryIndex<String, Image> imageIndex;
 
-    public ImageStore(final String filePath) throws DatabaseException {
+    public ImageMetaStore(final String filePath) throws DatabaseException {
         final EnvironmentConfig envConfig = new EnvironmentConfig();
         envConfig.setAllowCreate(true);
         envConfig.setTransactional(false);
