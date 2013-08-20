@@ -24,7 +24,7 @@ public class S3ImageStore implements ImageStore {
     }
 
     @Override
-    public BufferedImage readImage(String imagePath) {
+    public BufferedImage readImage(final String imagePath) {
         try {
             final String keyName = this.prefix + imagePath;
             final S3Object obj = this.client.getObject(new GetObjectRequest(this.bucket, keyName));
@@ -38,20 +38,11 @@ public class S3ImageStore implements ImageStore {
     }
 
     @Override
-    public boolean saveImage(ImageMeta imageMeta, BufferedImage image) {
-        try {
-            final ByteArrayOutputStream os = new ByteArrayOutputStream();
-            ImageIO.write(image, "jpg", os);
-            final byte[] buffer = os.toByteArray();
-            final InputStream is = new ByteArrayInputStream(buffer);
-            final ObjectMetadata meta = new ObjectMetadata();
-            meta.setContentLength(buffer.length);
-            meta.setContentType("image/jpeg");
-            final String keyName = this.prefix + imageMeta.getId();
-            this.client.putObject(new PutObjectRequest(this.bucket, keyName, is, meta));
-            return true;
-        } catch (IOException e) {
-            return false;
-        }
+    public boolean saveImage(final ImageMeta imageMeta, final InputStream image) {
+        final ObjectMetadata meta = new ObjectMetadata();
+        meta.setContentType("image/jpeg");
+        final String keyName = this.prefix + imageMeta.getId();
+        this.client.putObject(new PutObjectRequest(this.bucket, keyName, image, meta));
+        return true;
     }
 }

@@ -1,9 +1,10 @@
 package co.deepthought.imagine.store;
 
+import com.google.common.io.ByteStreams;
+
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 
 public class FilesystemImageStore implements ImageStore {
 
@@ -24,10 +25,10 @@ public class FilesystemImageStore implements ImageStore {
     }
 
     @Override
-    public boolean saveImage(final ImageMeta imageMeta, final BufferedImage image) {
+    public boolean saveImage(final ImageMeta imageMeta, final InputStream image) {
         final File outputFile = new File(this.imagedir + imageMeta.getId());
         try {
-            ImageIO.write(image, "jpg", outputFile);
+            ByteStreams.copy(image, new FileOutputStream(outputFile));
             return true;
         } catch (IOException e) {
             return false;

@@ -3,7 +3,6 @@ package co.deepthought.imagine.server;
 import co.deepthought.imagine.store.*;
 import com.sleepycat.je.DatabaseException;
 
-import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 
 import org.eclipse.jetty.server.Handler;

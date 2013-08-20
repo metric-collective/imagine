@@ -16,11 +16,14 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.awt.color.CMMException;
 import java.awt.image.BufferedImage;
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.URL;
 
 public class SideloadHandler extends AbstractHandler {
+
+    final int FILESIZE_LIMIT = 1048576;
 
     final static Logger LOGGER = Logger.getLogger(ImageServer.class.getCanonicalName());
 
@@ -55,7 +58,11 @@ public class SideloadHandler extends AbstractHandler {
             final String url = request.getParameter("url");
             try {
                 final long start = System.currentTimeMillis();
-                final BufferedImage img = ImageIO.read(new URL(url));
+                final URL target = new URL(url);
+                final BufferedInputStream imageStream = new BufferedInputStream(target.openStream());
+                imageStream.mark(FILESIZE_LIMIT);
+                final BufferedImage img = ImageIO.read(imageStream);
+                imageStream.reset(); // reset for writing
 
                 final Fingerprinter fingerprinter = new Fingerprinter(img);
                 final String fingerprintSmall = fingerprinter.getFingerprint(this.fingerprintSizeSmall);
@@ -66,15 +73,15 @@ public class SideloadHandler extends AbstractHandler {
                 final ImageMeta duplicate = this.metaStore.getSimilar(image, this.similarityTolerance);
                 if(duplicate == null) {
                     this.metaStore.persist(image);
-                    this.imageStore.saveImage(image, img);
+                    this.imageStore.saveImage(image, imageStream);
                     this.writeSuccessMessage(response.getWriter(), image, "new");
-                    LOGGER.info("Sideload NEW: " + url + " in " + (System.currentTimeMillis()-start));
+                    LOGGER.info("Sideload NEW: " + url + " in " + (System.currentTimeMillis() - start));
                 }
                 else if(duplicate.compareTo(image) < 0) {
                     // If the new image is bigger, replace it
                     image.setId(duplicate.getId());
                     this.metaStore.persist(image);
-                    this.imageStore.saveImage(image, img);
+                    this.imageStore.saveImage(image, imageStream);
                     this.writeSuccessMessage(response.getWriter(), image, "replace-duplicate");
                     LOGGER.info("Sideload REPLACE-DUPE: " + url +
                         " - " + duplicate.getId() +
