@@ -23,7 +23,7 @@ import java.net.URL;
 
 public class SideloadHandler extends AbstractHandler {
 
-    final int FILESIZE_LIMIT = 1048576;
+    final int FILESIZE_LIMIT = 1024*1024;
 
     final static Logger LOGGER = Logger.getLogger(ImageServer.class.getCanonicalName());
 
@@ -31,19 +31,16 @@ public class SideloadHandler extends AbstractHandler {
     private final Size fingerprintSizeSmall;
     private final ImageMetaStore metaStore;
     private final ImageStore imageStore;
-    private final int similarityTolerance;
 
     public SideloadHandler(
             final ImageStore imageStore,
             final ImageMetaStore metaStore,
             final Size fingerprintSizeLarge,
-            final Size fingerprintSizeSmall,
-            final int similarityTolerance) {
+            final Size fingerprintSizeSmall) {
         this.metaStore = metaStore;
         this.fingerprintSizeLarge = fingerprintSizeLarge;
         this.fingerprintSizeSmall = fingerprintSizeSmall;
         this.imageStore = imageStore;
-        this.similarityTolerance = similarityTolerance;
     }
 
     @Override
@@ -70,7 +67,7 @@ public class SideloadHandler extends AbstractHandler {
 
                 final Size size = new Size(img.getWidth(), img.getHeight());
                 final ImageMeta image = new ImageMeta(fingerprintSmall, fingerprintLarge, size);
-                final ImageMeta duplicate = this.metaStore.getSimilar(image, this.similarityTolerance);
+                final ImageMeta duplicate = this.dedupe(image, request);
                 if(duplicate == null) {
                     this.metaStore.persist(image);
                     this.imageStore.saveImage(image, imageStream);
@@ -109,6 +106,21 @@ public class SideloadHandler extends AbstractHandler {
                 LOGGER.info("Sideload ERROR: " + url);
             }
             request.setHandled(true);
+        }
+    }
+
+    public ImageMeta dedupe(final ImageMeta imageMeta, final Request request) throws DatabaseException {
+        final String tolerance = request.getParameter("tolerance");
+        if(tolerance == null) {
+            return null;
+        }
+        else {
+            try {
+                final int toleranceValue = Integer.parseInt(tolerance);
+                return this.metaStore.getSimilar(imageMeta, toleranceValue);
+            } catch(NumberFormatException e) {
+                return null;
+            }
         }
     }
 

@@ -42,21 +42,25 @@ public class Fingerprinter {
     }
 
     public String getFingerprint(final Size size) {
-        final int average = this.getAverage();
+        final double average = this.getAverage();
+        final double stdev = this.getStdev(average);
         final BufferedImage sample = this.sample(size.getWidth(), size.getHeight());
         final BitSet bitSet = new BitSet();
         int count = 0;
         for(int x = 0; x < size.getWidth(); x++) {
             for(int y = 0; y < size.getHeight(); y++) {
-                bitSet.set(count, this.getPixelDarkness(sample, x, y) > average);
-                count++;
+                final double pixel = this.getPixelDarkness(sample, x, y);
+                for(double divisor = -1; divisor <= 1; divisor += 1) {
+                    bitSet.set(count, pixel > (average + (divisor * stdev)));
+                    count++;
+                }
             }
         }
         return Fingerprinter.encoder.encodeAsString(bitSet.toByteArray());
     }
 
-    private int getAverage() {
-        int sum = 0;
+    private double getAverage() {
+        double sum = 0;
         for(int x = 0; x < SAMPLE_RESOLUTION; x++) {
             for(int y = 0; y < SAMPLE_RESOLUTION; y++) {
                 sum += this.getPixelDarkness(this.image, x, y);
@@ -65,12 +69,23 @@ public class Fingerprinter {
         return sum / (SAMPLE_RESOLUTION * SAMPLE_RESOLUTION);
     }
 
+    private double getStdev(final double average) {
+        double sum = 0;
+        for(int x = 0; x < SAMPLE_RESOLUTION; x++) {
+            for(int y = 0; y < SAMPLE_RESOLUTION; y++) {
+                final double error = this.getPixelDarkness(this.image, x, y) - average;
+                sum += error * error;
+            }
+        }
+        return Math.sqrt(sum/(SAMPLE_RESOLUTION * SAMPLE_RESOLUTION));
+    }
+
     private int getPixelDarkness(final BufferedImage image, final int x, final int y) {
         final int pixel = image.getRGB(x, y);
         final ByteBuffer buffer = ByteBuffer.allocate(4);
         buffer.putInt(pixel);
         final byte[] bytes = buffer.array();
-        return (bytes[3] & 0xFF) + (bytes[2] & 0xFF) + (bytes[1] & 0xFF);
+        return (int)(0.21 * (bytes[3] & 0xFF) + 0.71 * (bytes[2] & 0xFF) + 0.07 * (bytes[1] & 0xFF));
     }
 
     private BufferedImage sample(final int xRes, final int yRes) {

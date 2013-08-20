@@ -28,14 +28,12 @@ public class ImageServer {
     private final Size fingerprintSizeLarge;
     private final Size fingerprintSizeSmall;
     private final ImageStore imageStore;
-    private final int similarityTolerance;
 
     public ImageServer(final Properties prop) throws DatabaseException {
         this.port = Integer.parseInt(prop.getProperty("port"));
         this.store = new ImageMetaStore(prop.getProperty("dbfile"));
         this.fingerprintSizeLarge = new Size(prop.getProperty("fingerprint_large"));
         this.fingerprintSizeSmall = new Size(prop.getProperty("fingerprint_small"));
-        this.similarityTolerance = Integer.parseInt(prop.getProperty("fingerprint_tolerance"));
 
         final String storeType = prop.getProperty("store_type");
         if(storeType.equals("fs")) {
@@ -59,8 +57,7 @@ public class ImageServer {
                 this.imageStore,
                 this.store,
                 this.fingerprintSizeLarge,
-                this.fingerprintSizeSmall,
-                this.similarityTolerance),
+                this.fingerprintSizeSmall),
             new ImageHandler(this.imageStore)
         });
         server.setHandler(handlers);
