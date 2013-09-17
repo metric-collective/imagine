@@ -27,27 +27,12 @@ public class FilesystemImageStore implements ImageStore {
     @Override
     public boolean saveImage(final ImageMeta imageMeta, final InputStream image) {
         final File outputFile = new File(this.imagedir + imageMeta.getId());
-
-        final FileOutputStream fileStream;
-        try{
-            fileStream = new FileOutputStream(outputFile);
-        } catch (FileNotFoundException e) {
-            return false;
-        }
-
-        try {
+        try (final FileOutputStream fileStream = new FileOutputStream(outputFile)){
             ByteStreams.copy(image, fileStream);
+            return true;
         } catch (IOException e) {
             return false;
-        } finally {
-            try {
-                fileStream.close();
-            } catch (IOException e) {
-                return false;
-            }
         }
-
-        return true;
     }
 
 }
