@@ -60,52 +60,34 @@ public class SideloadHandler extends AbstractHandler {
 
             final String url = request.getParameter("url");
             final long start = System.currentTimeMillis();
-            final URL target;
-            try {
-                target = new URL(url);
-            } catch (MalformedURLException e) {
-                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "malformed url: " + url);
-                return;
-            }
 
-            final InputStream urlInputStream;
+            final URLConnection connec;
             try {
-                final URLConnection connec = target.openConnection();
+                final URL target = new URL(url);
+                connec = target.openConnection();
                 connec.setConnectTimeout(1000); // TODO: configurable
-                urlInputStream = connec.getInputStream();
             } catch (IOException e) {
                 this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 1: " + url);
                 return;
             }
 
-            final BufferedInputStream imageStream = new BufferedInputStream(urlInputStream);
-            final BufferedImage img;
-            try{
+            try (
+                final InputStream urlInputStream = connec.getInputStream();
+                final BufferedInputStream imageStream = new BufferedInputStream(urlInputStream)
+            ){
                 imageStream.mark(FILESIZE_LIMIT);
-                img = ImageIO.read(imageStream);
+                final BufferedImage img = ImageIO.read(imageStream);
                 imageStream.reset(); // reset for writing
-            } catch (IOException e) {
-                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 2: " + url);
-                return;
-            } finally {
-                try {
-                    urlInputStream.close();
-                } catch (IOException e) {
-                    // fuck it!
+
+                if(img == null) {
+                    this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 2: " + url);
+                    return;
                 }
-            }
 
-            if(img == null) {
-                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 3: " + url);
-                return;
-            }
+                final Fingerprinter fingerprinter = new Fingerprinter(img);
+                final String fingerprintSmall = fingerprinter.getFingerprint(this.fingerprintSizeSmall);
+                final String fingerprintLarge = fingerprinter.getFingerprint(this.fingerprintSizeLarge);
 
-
-            final Fingerprinter fingerprinter = new Fingerprinter(img);
-            final String fingerprintSmall = fingerprinter.getFingerprint(this.fingerprintSizeSmall);
-            final String fingerprintLarge = fingerprinter.getFingerprint(this.fingerprintSizeLarge);
-
-            try {
                 final Size size = new Size(img.getWidth(), img.getHeight());
                 final ImageMeta image = new ImageMeta(fingerprintSmall, fingerprintLarge, size);
                 final ImageMeta duplicate = this.dedupe(image, request);
@@ -135,12 +117,8 @@ public class SideloadHandler extends AbstractHandler {
                 }
             } catch (DatabaseException e) {
                 this.writeErrorMessage(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "database error");
-            } finally {
-                try {
-                    imageStream.close();
-                } catch (IOException e) {
-                    // fuck it
-                }
+            } catch (IOException e) {
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 3: " + url);
             }
         }
     }

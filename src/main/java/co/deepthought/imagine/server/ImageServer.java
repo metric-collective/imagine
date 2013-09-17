@@ -9,6 +9,7 @@ import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.HandlerCollection;
 
+import java.io.File;
 import java.io.FileInputStream;
 
 import java.util.Properties;
@@ -28,12 +29,14 @@ public class ImageServer {
     private final Size fingerprintSizeLarge;
     private final Size fingerprintSizeSmall;
     private final ImageStore imageStore;
+    private final File cacheDir;
 
     public ImageServer(final Properties prop) throws DatabaseException {
         this.port = Integer.parseInt(prop.getProperty("port"));
         this.store = new ImageMetaStore(prop.getProperty("dbfile"));
         this.fingerprintSizeLarge = new Size(prop.getProperty("fingerprint_large"));
         this.fingerprintSizeSmall = new Size(prop.getProperty("fingerprint_small"));
+        this.cacheDir = new File(prop.getProperty("cache_dir"));
 
         final String storeType = prop.getProperty("store_type");
         if(storeType.equals("fs")) {
@@ -58,7 +61,10 @@ public class ImageServer {
                 this.store,
                 this.fingerprintSizeLarge,
                 this.fingerprintSizeSmall),
-            new ImageHandler(this.imageStore)
+            new ImageHandler(
+                this.imageStore,
+                this.cacheDir
+            )
         });
         server.setHandler(handlers);
         server.setAttribute("org.eclipse.jetty.server.Request.maxFormContentSize", -1);

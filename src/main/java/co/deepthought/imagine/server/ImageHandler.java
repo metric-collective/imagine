@@ -12,6 +12,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 
@@ -19,10 +20,12 @@ public class ImageHandler extends AbstractHandler {
 
     final static Logger LOGGER = Logger.getLogger(ImageServer.class.getCanonicalName());
 
+    private final File cacheDir;
     private final ImageStore store;
 
-    public ImageHandler(final ImageStore store) {
+    public ImageHandler(final ImageStore store, final File cacheDir) {
         this.store = store;
+        this.cacheDir = cacheDir;
     }
 
     @Override
@@ -33,6 +36,7 @@ public class ImageHandler extends AbstractHandler {
         final HttpServletResponse response) throws IOException, ServletException
     {
         if(path.startsWith("/image/")) {
+            request.setHandled(true);
             final long start = System.currentTimeMillis();
             response.setContentType("image/jpeg");
             final String imagePath = path.substring(7);
@@ -41,14 +45,14 @@ public class ImageHandler extends AbstractHandler {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             }
             else {
-                final OutputStream os = response.getOutputStream();
-                final Resizer resizer = this.getResizer(srcImage, request);
-                resizer.writeImage(srcImage, os);
+                try (final OutputStream os = response.getOutputStream()){
+                    final Resizer resizer = this.getResizer(srcImage, request);
+                    resizer.writeImage(srcImage, os, this.cacheDir);
+                }
                 response.setStatus(HttpServletResponse.SC_OK);
                 LOGGER.info("Image " + path +
                     " in " + (System.currentTimeMillis() - start));
             }
-            request.setHandled(true);
         }
     }
 

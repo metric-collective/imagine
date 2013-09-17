@@ -7,12 +7,15 @@ import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
+import javax.imageio.stream.FileCacheImageOutputStream;
 import javax.imageio.stream.ImageOutputStream;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.UUID;
 
 public class Resizer {
 
@@ -128,16 +131,24 @@ public class Resizer {
 
     }
 
-    public void writeImage(final BufferedImage sourceImage, final OutputStream outputStream) throws IOException {
-        final ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
-        final ImageOutputStream imageOutputStream = new MemoryCacheImageOutputStream(outputStream);
-        writer.setOutput(imageOutputStream);
-        final BufferedImage resizedImage = this.resizeImage(sourceImage);
-        final IIOImage outputImage = new IIOImage(resizedImage, null, null);
-        ImageWriteParam param = writer.getDefaultWriteParam();
-        param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-        param.setCompressionQuality(this.quality);
-        writer.write(null, outputImage, param);
+    public void writeImage(
+            final BufferedImage sourceImage,
+            final OutputStream outputStream,
+            final File cacheDir) throws IOException {
+
+        try (
+            final CloseableImageWriter writer = new CloseableImageWriter("jpg");
+            // TODO: should this be in-memory?
+            final ImageOutputStream imageOutputStream = new FileCacheImageOutputStream(outputStream, cacheDir)
+        ) {
+            writer.setOutput(imageOutputStream);
+            final BufferedImage resizedImage = this.resizeImage(sourceImage);
+            final IIOImage outputImage = new IIOImage(resizedImage, null, null);
+            final ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(this.quality);
+            writer.write(outputImage, param);
+        }
     }
 
 }

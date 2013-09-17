@@ -25,15 +25,21 @@ public class S3ImageStore implements ImageStore {
 
     @Override
     public BufferedImage readImage(final String imagePath) {
+        final String keyName = this.prefix + imagePath;
+        final S3Object obj = this.client.getObject(new GetObjectRequest(this.bucket, keyName));
+        final InputStream is = obj.getObjectContent();
         try {
-            final String keyName = this.prefix + imagePath;
-            final S3Object obj = this.client.getObject(new GetObjectRequest(this.bucket, keyName));
-            final InputStream is = obj.getObjectContent();
             return ImageIO.read(is);
         } catch (IOException e) {
             return null;
         } catch (AmazonS3Exception e) {
             return null;
+        } finally {
+            try {
+                is.close();
+            } catch (IOException e) {
+                // fuck it..
+            }
         }
     }
 
