@@ -64,7 +64,7 @@ public class SideloadHandler extends AbstractHandler {
             try {
                 target = new URL(url);
             } catch (MalformedURLException e) {
-                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "malformed url");
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "malformed url: " + url);
                 return;
             }
 
@@ -74,7 +74,7 @@ public class SideloadHandler extends AbstractHandler {
                 connec.setConnectTimeout(1000); // TODO: configurable
                 urlInputStream = connec.getInputStream();
             } catch (IOException e) {
-                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem");
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 1: " + url);
                 return;
             }
 
@@ -85,7 +85,7 @@ public class SideloadHandler extends AbstractHandler {
                 img = ImageIO.read(imageStream);
                 imageStream.reset(); // reset for writing
             } catch (IOException e) {
-                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem");
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 2: " + url);
                 return;
             } finally {
                 try {
@@ -94,6 +94,12 @@ public class SideloadHandler extends AbstractHandler {
                     // fuck it!
                 }
             }
+
+            if(img == null) {
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem 3: " + url);
+                return;
+            }
+
 
             final Fingerprinter fingerprinter = new Fingerprinter(img);
             final String fingerprintSmall = fingerprinter.getFingerprint(this.fingerprintSizeSmall);
