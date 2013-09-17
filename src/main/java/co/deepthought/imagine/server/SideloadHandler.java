@@ -18,8 +18,12 @@ import java.awt.color.CMMException;
 import java.awt.image.BufferedImage;
 import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLConnection;
 
 public class SideloadHandler extends AbstractHandler {
 
@@ -48,30 +52,62 @@ public class SideloadHandler extends AbstractHandler {
         final String path,
         final Request request,
         final HttpServletRequest httpServletRequest,
-        final HttpServletResponse response) throws IOException, ServletException
+        final HttpServletResponse response)
     {
         if(path.equals("/sideload/")) {
             response.setContentType("application/json");
+            request.setHandled(true);
+
             final String url = request.getParameter("url");
+            final long start = System.currentTimeMillis();
+            final URL target;
             try {
-                final long start = System.currentTimeMillis();
-                final URL target = new URL(url);
-                final BufferedInputStream imageStream = new BufferedInputStream(target.openStream());
+                target = new URL(url);
+            } catch (MalformedURLException e) {
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "malformed url");
+                return;
+            }
+
+            final InputStream urlInputStream;
+            try {
+                final URLConnection connec = target.openConnection();
+                connec.setConnectTimeout(1000); // TODO: configurable
+                urlInputStream = connec.getInputStream();
+            } catch (IOException e) {
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem");
+                return;
+            }
+
+            final BufferedInputStream imageStream = new BufferedInputStream(urlInputStream);
+            final BufferedImage img;
+            try{
                 imageStream.mark(FILESIZE_LIMIT);
-                final BufferedImage img = ImageIO.read(imageStream);
+                img = ImageIO.read(imageStream);
                 imageStream.reset(); // reset for writing
+            } catch (IOException e) {
+                this.writeErrorMessage(response, HttpServletResponse.SC_BAD_REQUEST, "download problem");
+                return;
+            } finally {
+                try {
+                    urlInputStream.close();
+                } catch (IOException e) {
+                    // fuck it!
+                }
+            }
 
-                final Fingerprinter fingerprinter = new Fingerprinter(img);
-                final String fingerprintSmall = fingerprinter.getFingerprint(this.fingerprintSizeSmall);
-                final String fingerprintLarge = fingerprinter.getFingerprint(this.fingerprintSizeLarge);
+            final Fingerprinter fingerprinter = new Fingerprinter(img);
+            final String fingerprintSmall = fingerprinter.getFingerprint(this.fingerprintSizeSmall);
+            final String fingerprintLarge = fingerprinter.getFingerprint(this.fingerprintSizeLarge);
 
+            try {
                 final Size size = new Size(img.getWidth(), img.getHeight());
                 final ImageMeta image = new ImageMeta(fingerprintSmall, fingerprintLarge, size);
                 final ImageMeta duplicate = this.dedupe(image, request);
+
                 if(duplicate == null) {
                     this.metaStore.persist(image);
                     this.imageStore.saveImage(image, imageStream);
-                    this.writeSuccessMessage(response.getWriter(), image, "new");
+                    this.writeSuccessMessage(response, image, "new");
                     LOGGER.info("Sideload NEW: " + url + " in " + (System.currentTimeMillis() - start));
                 }
                 else if(duplicate.compareTo(image) < 0) {
@@ -79,33 +115,27 @@ public class SideloadHandler extends AbstractHandler {
                     image.setId(duplicate.getId());
                     this.metaStore.persist(image);
                     this.imageStore.saveImage(image, imageStream);
-                    this.writeSuccessMessage(response.getWriter(), image, "replace-duplicate");
+                    this.writeSuccessMessage(response, image, "replace-duplicate");
                     LOGGER.info("Sideload REPLACE-DUPE: " + url +
                         " - " + duplicate.getId() +
                         " in " + (System.currentTimeMillis()-start));
                 }
                 else {
                     // If the duplicate is big enough use it.
-                    this.writeSuccessMessage(response.getWriter(), duplicate, "use-duplicate");
+                    this.writeSuccessMessage(response, duplicate, "use-duplicate");
                     LOGGER.info("Sideload USE-DUPE: " + url +
                         " - " + duplicate.getId() +
                         " in " + (System.currentTimeMillis()-start));
                 }
-                response.setStatus(HttpServletResponse.SC_OK);
             } catch (DatabaseException e) {
-                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                response.getWriter().print("{\"error\": \"database error\",\"status\":\"error\"}");
-            } catch (IIOException e) {
-                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                response.getWriter().print("{\"error\": \"image missing\",\"status\":\"error\"}");
-                LOGGER.info("Sideload MISSING: " + url);
+                this.writeErrorMessage(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "database error");
+            } finally {
+                try {
+                    imageStream.close();
+                } catch (IOException e) {
+                    // fuck it
+                }
             }
-            catch(CMMException e) {
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                response.getWriter().print("{\"error\": \"image format problem\",\"status\":\"error\"}");
-                LOGGER.info("Sideload ERROR: " + url);
-            }
-            request.setHandled(true);
         }
     }
 
@@ -124,15 +154,32 @@ public class SideloadHandler extends AbstractHandler {
         }
     }
 
-    public void writeSuccessMessage(final PrintWriter writer, final ImageMeta image, final String status) {
-        writer.print("{");
-        writer.print("\"width\":" + image.getSize().getWidth() + ",");
-        writer.print("\"height\":" + image.getSize().getHeight() + ",");
-        writer.print("\"id\":\"" + image.getId() + "\",");
-        writer.print("\"fingerprintSmall\":\"" + image.getFingerprintSmall() + "\",");
-        writer.print("\"fingerprintLarge\":\"" + image.getFingerprintLarge() + "\",");
-        writer.print("\"status\":\"" + status + "\"");
-        writer.print("}");
+    public void writeSuccessMessage(final HttpServletResponse response, final ImageMeta image, final String status) {
+        response.setStatus(HttpServletResponse.SC_OK);
+        final PrintWriter writer;
+        try {
+            writer = response.getWriter();
+            writer.print("{");
+            writer.print("\"width\":" + image.getSize().getWidth() + ",");
+            writer.print("\"height\":" + image.getSize().getHeight() + ",");
+            writer.print("\"id\":\"" + image.getId() + "\",");
+            writer.print("\"fingerprintSmall\":\"" + image.getFingerprintSmall() + "\",");
+            writer.print("\"fingerprintLarge\":\"" + image.getFingerprintLarge() + "\",");
+            writer.print("\"status\":\"" + status + "\"");
+            writer.print("}");
+        } catch (IOException e) {
+            // fuck it
+        }
+    }
+
+    private void writeErrorMessage(final HttpServletResponse response, final int status, final String msg) {
+        LOGGER.info("Error: " + msg);
+        response.setStatus(status);
+        try {
+            response.getWriter().print("{\"error\": \"" + msg + "\",\"status\":\"error\"}");
+        } catch (IOException e) {
+            // fuck it
+        }
     }
 
 }
